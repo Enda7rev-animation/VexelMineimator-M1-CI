@@ -1,4 +1,4 @@
-﻿name: Build Vexel Mine-imator M1 Ender
+name: Build Vexel Mine-imator M1 Ender
 
 on:
   workflow_dispatch:
@@ -6,6 +6,10 @@ on:
     paths:
       - 'VexelMineimator-M1-Ender-Builder.zip'
       - '.github/workflows/build-m1.yml'
+
+concurrency:
+  group: vexel-m1-ci
+  cancel-in-progress: true
 
 jobs:
   build-m1:
@@ -32,6 +36,10 @@ jobs:
           mkdir -p work
           ditto -x -k VexelMineimator-M1-Ender-Builder.zip work
           chmod +x work/MacM1/*.command
+          # The ZIP was created on Windows in UTC+7. ZIP timestamps have no
+          # timezone, so the UTC GitHub runner can see extracted inputs as
+          # several hours in the future and make Ninja re-run CMake forever.
+          find work -type f -exec touch {} +
           test -f work/CppProject/CMakeLists.txt
           test -d work/CppProject/Generated
 
