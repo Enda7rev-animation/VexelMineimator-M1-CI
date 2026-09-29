@@ -1,0 +1,90 @@
+﻿name: Build Vexel Mine-imator M1 Ender
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'VexelMineimator-M1-Ender-Builder.zip'
+      - '.github/workflows/build-m1.yml'
+
+jobs:
+  build-m1:
+    runs-on: macos-14
+    timeout-minutes: 120
+    steps:
+      - name: Checkout CI repository
+        uses: actions/checkout@v4
+
+      - name: Verify Apple Silicon runner
+        shell: bash
+        run: |
+          set -euxo pipefail
+          uname -a
+          uname -m
+          sw_vers
+          test "$(uname -m)" = "arm64"
+
+      - name: Extract Ender builder
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf work
+          mkdir -p work
+          ditto -x -k VexelMineimator-M1-Ender-Builder.zip work
+          chmod +x work/MacM1/*.command
+          test -f work/CppProject/CMakeLists.txt
+          test -d work/CppProject/Generated
+
+      - name: Build native M1 app and DMG
+        shell: bash
+        working-directory: work
+        run: |
+          set -o pipefail
+          ./MacM1/bootstrap-and-build.command 2>&1 | tee "$GITHUB_WORKSPACE/vexel-m1-build.log"
+
+      - name: Verify distributable
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP='work/dist-macos-m1/Vexel Mine-imator M1 Ender.app'
+          DMG='work/dist-macos-m1/VexelMineimator-M1-Ender.dmg'
+          ZIP='work/dist-macos-m1/VexelMineimator-M1-Ender.zip'
+          EXE="$APP/Contents/MacOS/Mine-imator"
+          test -d "$APP"
+          test -f "$DMG"
+          test -f "$ZIP"
+          lipo -archs "$EXE" | grep -qw arm64
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          hdiutil verify "$DMG"
+          shasum -a 256 "$DMG" "$ZIP"
+          echo 'Checking for unresolved Homebrew runtime paths:'
+          bad=0
+          while IFS= read -r -d '' f; do
+            if file "$f" 2>/dev/null | grep -q 'Mach-O'; then
+              if otool -L "$f" 2>/dev/null | grep -q '/opt/homebrew'; then
+                echo "UNBUNDLED: $f"
+                otool -L "$f" | grep '/opt/homebrew' || true
+                bad=1
+              fi
+            fi
+          done < <(find "$APP" -type f -print0)
+          test "$bad" -eq 0
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexelMineimator-M1-build-log
+          path: vexel-m1-build.log
+          if-no-files-found: warn
+
+      - name: Upload M1 release
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexelMineimator-M1-Ender
+          path: |
+            work/dist-macos-m1/VexelMineimator-M1-Ender.dmg
+            work/dist-macos-m1/VexelMineimator-M1-Ender.zip
+          if-no-files-found: error
+          compression-level: 0
