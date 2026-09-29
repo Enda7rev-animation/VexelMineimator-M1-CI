@@ -88,3 +88,4 @@ jobs:
             work/dist-macos-m1/VexelMineimator-M1-Ender.zip
           if-no-files-found: error
           compression-level: 0
+
