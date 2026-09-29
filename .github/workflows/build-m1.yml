@@ -43,6 +43,21 @@ jobs:
           test -f work/CppProject/CMakeLists.txt
           test -d work/CppProject/Generated
 
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: vexel-m1-ccache-${{ github.run_id }}
+          restore-keys: |
+            vexel-m1-ccache-
+
+      - name: Enable ccache
+        shell: bash
+        run: |
+          brew install ccache
+          ccache --max-size=2G
+          ccache --zero-stats
+
       - name: Build native M1 app and DMG
         shell: bash
         working-directory: work
@@ -85,6 +100,11 @@ jobs:
           name: VexelMineimator-M1-build-log
           path: vexel-m1-build.log
           if-no-files-found: warn
+
+      - name: Show ccache stats
+        if: always()
+        shell: bash
+        run: ccache --show-stats || true
 
       - name: Upload M1 release
         if: success()
