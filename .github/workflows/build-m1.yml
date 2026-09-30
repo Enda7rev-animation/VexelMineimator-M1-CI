@@ -84,11 +84,20 @@ jobs:
           bad=0
           while IFS= read -r -d '' f; do
             if file "$f" 2>/dev/null | grep -q 'Mach-O'; then
-              if otool -L "$f" 2>/dev/null | grep -q '/opt/homebrew'; then
-                echo "UNBUNDLED: $f"
-                otool -L "$f" | grep '/opt/homebrew' || true
+              while IFS= read -r dep; do
+                dep="${dep#${dep%%[![:space:]]*}}"
+                dep="${dep%% (*}"
+                [[ "$dep" == /opt/homebrew/* ]] || continue
+                # otool -L includes LC_ID_DYLIB for dylibs.  A plugin's own
+                # install id is not a runtime dependency; bootstrap also
+                # normalizes these IDs, but ignore a matching self-id here so
+                # this check is specifically about unresolved load commands.
+                if [[ "$(basename "$dep")" == "$(basename "$f")" ]]; then
+                  continue
+                fi
+                echo "UNBUNDLED DEPENDENCY: $f -> $dep"
                 bad=1
-              fi
+              done < <(otool -L "$f" 2>/dev/null | tail -n +2)
             fi
           done < <(find "$APP" -type f -print0)
           test "$bad" -eq 0
